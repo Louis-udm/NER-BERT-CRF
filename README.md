@@ -1,4 +1,6 @@
 # BERT-NER
+> Zhibin Lu
+
 This is a named entity recognizer based on [BERT Model(pytorch-pretrained-BERT)](https://github.com/huggingface/pytorch-pretrained-BERT) and CRF.
 ## Requirements
 - python 3.7
@@ -27,7 +29,7 @@ The NER_BERT_CRF.py include 2 model:
   - Accuracy on train data: 99.940 %
   - Accuracy of test data: 97.906 % (98.75 % for total epochs = 8)
 ### Reference
-[Bert paper](https://arxiv.org/abs/1810.04805)
-[Bert with PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT)
-[Bert-ner](https://github.com/ericput/bert-ner)
-[CoNLL-2003 data set](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
+- [Bert paper](https://arxiv.org/abs/1810.04805)
+- [Bert with PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT)
+- [Bert-ner](https://github.com/ericput/bert-ner)
+- [CoNLL-2003 data set](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
