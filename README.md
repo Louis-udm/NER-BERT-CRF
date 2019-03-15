@@ -11,7 +11,7 @@ The NER_BERT_CRF.py include 2 model:
 - model 2:
   - A pretrained BERT with CRF model.
 - data set
-  - [CoNLL-2003](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
+  - [CoNLL-2003](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata/ori)
 ### parameters
 - NER_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC', '[CLS]', '[SEP]', 'X']
 - max_seq_length = 128
