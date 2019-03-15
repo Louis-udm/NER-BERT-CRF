@@ -1,4 +1,4 @@
-# BERT-NER
+# NER implementation with BERT and CRF model
 > Zhibin Lu
 
 This is a named entity recognizer based on [BERT Model(pytorch-pretrained-BERT)](https://github.com/huggingface/pytorch-pretrained-BERT) and CRF.
