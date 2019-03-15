@@ -3,7 +3,7 @@
 
 This is a named entity recognizer based on [BERT Model(pytorch-pretrained-BERT)](https://github.com/huggingface/pytorch-pretrained-BERT) and CRF.
 ## Requirements
-- python 3.7
+- python 3.6
 - pytorch 1.0.0
 - pytorch-pretrained-bert 0.4.0
 ## Overview
