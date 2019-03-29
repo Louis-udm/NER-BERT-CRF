@@ -79,7 +79,7 @@ max_seq_length = 128 #300
 batch_size = 32 #32
 # "The initial learning rate for Adam."
 learning_rate = 2e-5
-total_train_epochs = 10
+total_train_epochs = 20
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
@@ -444,6 +444,8 @@ if load_checkpoint and os.path.exists(output_dir+'/ner_bert_checkpoint.pt'):
     valid_f1_prev = checkpoint['valid_f1']
     model = BertForTokenClassification.from_pretrained(
         'bert-base-uncased', state_dict=checkpoint['model_state'], num_labels=len(label_list))
+    print('Loaded the pretrain NER_BERT model, epoch:',checkpoint['epoch'],'valid acc:', 
+            checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 else:
     start_epoch = 0
     valid_acc_prev = 0
@@ -734,6 +736,8 @@ if load_checkpoint and os.path.exists(output_dir+'/ner_bert_crf_checkpoint.pt'):
     pretrained_dict_selected = {k: v for k, v in pretrained_dict.items() if k in net_state_dict}
     net_state_dict.update(pretrained_dict_selected)
     model.load_state_dict(net_state_dict)
+    print('Loaded the pretrain NER_BERT_CRF model, epoch:',checkpoint['epoch'],'valid acc:', 
+            checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 else:
     start_epoch = 0
     valid_acc_prev = 0
