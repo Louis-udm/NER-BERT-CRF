@@ -83,6 +83,7 @@ total_train_epochs = 20
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
+bert_model_type = 'bert-base-uncased'
 do_lower_case = True
 eval_batch_size = 8
 predict_batch_size = 8
@@ -397,7 +398,7 @@ train_examples = conllProcessor.get_train_examples(data_dir)
 dev_examples = conllProcessor.get_dev_examples(data_dir)
 test_examples = conllProcessor.get_test_examples(data_dir)
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=do_lower_case)
+tokenizer = BertTokenizer.from_pretrained(bert_model_type, do_lower_case=do_lower_case)
 
 train_features, train_tokenize_info = convert_examples_to_features(train_examples, max_seq_length, tokenizer, label_map)
 dev_features, train_tokenize_info = convert_examples_to_features(dev_examples, max_seq_length, tokenizer, label_map)
@@ -443,7 +444,7 @@ if load_checkpoint and os.path.exists(output_dir+'/ner_bert_checkpoint.pt'):
     valid_acc_prev = checkpoint['valid_acc']
     valid_f1_prev = checkpoint['valid_f1']
     model = BertForTokenClassification.from_pretrained(
-        'bert-base-uncased', state_dict=checkpoint['model_state'], num_labels=len(label_list))
+        bert_model_type, state_dict=checkpoint['model_state'], num_labels=len(label_list))
     print('Loaded the pretrain NER_BERT model, epoch:',checkpoint['epoch'],'valid acc:', 
             checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 else:
@@ -451,7 +452,7 @@ else:
     valid_acc_prev = 0
     valid_f1_prev = 0
     model = BertForTokenClassification.from_pretrained(
-        'bert-base-uncased', num_labels=len(label_list))
+        bert_model_type, num_labels=len(label_list))
 
 model.to(device)
 
@@ -722,7 +723,7 @@ class BERT_CRF_NER(nn.Module):
 start_label_id = conllProcessor.get_start_label_id()
 stop_label_id = conllProcessor.get_stop_label_id()
 
-bert_model = BertModel.from_pretrained('bert-base-uncased')
+bert_model = BertModel.from_pretrained(bert_model_type)
 model = BERT_CRF_NER(bert_model, start_label_id, stop_label_id, len(label_list), max_seq_length, batch_size, device)
 
 #%%
