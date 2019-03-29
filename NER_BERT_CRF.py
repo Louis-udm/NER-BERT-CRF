@@ -4,7 +4,7 @@
 # NER_BERT_CRF.py
 # @author Zhibin.LU
 # @created Fri Feb 15 2019 22:47:19 GMT-0500 (EST)
-# @last-modified Fri Mar 15 2019 11:37:18 GMT-0400 (EDT)
+# @last-modified Fri Mar 29 2019 11:37:18 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description: Bert pytorch pretrainde model with or without CRF for NER
 # The NER_BERT_CRF.py include 2 model:
@@ -79,7 +79,7 @@ max_seq_length = 128 #300
 batch_size = 32 #32
 # "The initial learning rate for Adam."
 learning_rate = 2e-5
-total_train_epochs = 5
+total_train_epochs = 10
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
@@ -93,6 +93,7 @@ warmup_proportion = 0.1
 save_checkpoints_steps = 1000
 # "How many steps to make in each estimator call."
 iterations_per_loop = 1000
+load_checkpoint = True
 
 
 # %%
@@ -344,6 +345,40 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, label_map,
                 
     return features, tokenize_info
 
+def f1_score(y_true, y_pred, ignore_labels=np.array([0,9,10,11])):
+    '''
+    0,9,10,11 are O,[CLS],[SEP],[X]
+    '''
+    # y_pred=y_pred[np.isin(y_pred,ignore_labels,invert=True)]
+    # y_true=y_true[np.isin(y_true,ignore_labels,invert=True)]
+    num_proposed = len(y_pred[np.isin(y_pred,ignore_labels,invert=True)])
+    num_correct = (np.logical_and(y_true==y_pred, 
+                    np.isin(y_true,ignore_labels,invert=True))).sum()
+    num_gold = len(y_true[np.isin(y_true,ignore_labels,invert=True)])
+
+    # print(f"num_proposed:{num_proposed}")
+    # print(f"num_correct:{num_correct}")
+    # print(f"num_gold:{num_gold}")
+    try:
+        precision = num_correct / num_proposed
+    except ZeroDivisionError:
+        precision = 1.0
+
+    try:
+        recall = num_correct / num_gold
+    except ZeroDivisionError:
+        recall = 1.0
+
+    try:
+        f1 = 2*precision*recall / (precision + recall)
+    except ZeroDivisionError:
+        if precision*recall==0:
+            f1=1.0
+        else:
+            f1=0
+
+    return precision, recall, f1
+    
 #%%
 '''
 Prepare data set
@@ -402,15 +437,17 @@ test_dataloader = get_pytorch_dataloader(test_features, batch_size)
 '''
 print('*** Use only BertForTokenClassification ***')
 
-if True and os.path.exists(output_dir+'/ner_bert_checkpoint.pt'):
+if load_checkpoint and os.path.exists(output_dir+'/ner_bert_checkpoint.pt'):
     checkpoint = torch.load(output_dir+'/ner_bert_checkpoint.pt', map_location='cpu')
     start_epoch = checkpoint['epoch']+1
     valid_acc_prev = checkpoint['valid_acc']
+    valid_f1_prev = checkpoint['valid_f1']
     model = BertForTokenClassification.from_pretrained(
         'bert-base-uncased', state_dict=checkpoint['model_state'], num_labels=len(label_list))
 else:
     start_epoch = 0
     valid_acc_prev = 0
+    valid_f1_prev = 0
     model = BertForTokenClassification.from_pretrained(
         'bert-base-uncased', num_labels=len(label_list))
 
@@ -428,7 +465,8 @@ optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate, warmup=warm
 def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     # print("***** Running prediction *****")
     model.eval()
-    # predictions = []
+    all_preds = []
+    all_labels = []
     total=0
     correct=0
     start = time.time()
@@ -442,16 +480,18 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
             valid_predicted = torch.masked_select(predicted, predict_mask)
             valid_label_ids = torch.masked_select(label_ids, predict_mask)
             # print(len(valid_label_ids),len(valid_predicted),len(valid_label_ids)==len(valid_predicted))
+            all_preds.extend(valid_predicted.tolist())
+            all_labels.extend(valid_label_ids.tolist())
             total += len(valid_label_ids)
             correct += valid_predicted.eq(valid_label_ids).sum().item()
-            # predictions.extend(np.argmax(out_scores, -1).tolist())
 
     test_acc = correct/total
+    precision, recall, f1 = f1_score(np.array(all_labels), np.array(all_preds))
     end = time.time()
-    print('Epoch : %d, Acc : %.3f on %s, Spend:%.3f minutes for evaluation' \
-        % (epoch_th, 100.*test_acc, dataset_name,(end-start)/60.0))
+    print('Epoch:%d, Acc:%.2f, P%.2f, R%.2f, F%.2f on %s, Spend:%.3f minutes for evaluation' \
+        % (epoch_th, 100.*test_acc, 100.*precision, 100.*recall, 100.*f1, dataset_name,(end-start)/60.0))
     print('--------------------------------------------------------------')
-    return test_acc
+    return test_acc, f1
 
 
 #%%
@@ -490,14 +530,14 @@ for epoch in range(start_epoch, total_train_epochs):
     
     print('--------------------------------------------------------------')
     print("Epoch:{} completed, Total Train Loss: {} ".format(epoch, tr_loss)) 
-    valid_acc = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
+    valid_acc, valid_f1 = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
     # Save a checkpoint
-    if valid_acc > valid_acc_prev:
+    if valid_f1 > valid_f1_prev:
         # model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         torch.save({'epoch': epoch, 'model_state': model.state_dict(), 'valid_acc': valid_acc,
-            'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
+            'valid_f1':valid_f1, 'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
                     os.path.join(output_dir, 'ner_bert_checkpoint.pt'))
-        valid_acc_prev = valid_acc
+        valid_f1_prev = valid_f1
 
 #%%
 evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
@@ -684,10 +724,11 @@ bert_model = BertModel.from_pretrained('bert-base-uncased')
 model = BERT_CRF_NER(bert_model, start_label_id, stop_label_id, len(label_list), max_seq_length, batch_size, device)
 
 #%%
-if True and os.path.exists(output_dir+'/ner_bert_crf_checkpoint.pt'):
+if load_checkpoint and os.path.exists(output_dir+'/ner_bert_crf_checkpoint.pt'):
     checkpoint = torch.load(output_dir+'/ner_bert_crf_checkpoint.pt', map_location='cpu')
     start_epoch = checkpoint['epoch']+1
     valid_acc_prev = checkpoint['valid_acc']
+    valid_f1_prev = checkpoint['valid_f1']
     pretrained_dict=checkpoint['model_state']
     net_state_dict = model.state_dict()
     pretrained_dict_selected = {k: v for k, v in pretrained_dict.items() if k in net_state_dict}
@@ -696,6 +737,7 @@ if True and os.path.exists(output_dir+'/ner_bert_crf_checkpoint.pt'):
 else:
     start_epoch = 0
     valid_acc_prev = 0
+    valid_f1_prev = 0
 
 model.to(device)
 
@@ -724,7 +766,8 @@ def warmup_linear(x, warmup=0.002):
 def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     # print("***** Running prediction *****")
     model.eval()
-    # predictions = []
+    all_preds = []
+    all_labels = []
     total=0
     correct=0
     start = time.time()
@@ -733,17 +776,22 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
             batch = tuple(t.to(device) for t in batch)
             input_ids, input_mask, segment_ids, predict_mask, label_ids = batch
             _, predicted_label_seq_ids = model(input_ids, segment_ids, input_mask)
+            # _, predicted = torch.max(out_scores, -1)
             valid_predicted = torch.masked_select(predicted_label_seq_ids, predict_mask)
             valid_label_ids = torch.masked_select(label_ids, predict_mask)
+            all_preds.extend(valid_predicted.tolist())
+            all_labels.extend(valid_label_ids.tolist())
+            # print(len(valid_label_ids),len(valid_predicted),len(valid_label_ids)==len(valid_predicted))
             total += len(valid_label_ids)
             correct += valid_predicted.eq(valid_label_ids).sum().item()
 
     test_acc = correct/total
+    precision, recall, f1 = f1_score(np.array(all_labels), np.array(all_preds))
     end = time.time()
-    print('Epoch : %d, Acc : %.3f on %s, Spend:%.3f minutes for evaluation' \
-        % (epoch_th, 100.*test_acc, dataset_name,(end-start)/60.0))
+    print('Epoch:%d, Acc:%.2f, P%.2f, R%.2f, F%.2f on %s, Spend:%.3f minutes for evaluation' \
+        % (epoch_th, 100.*test_acc, 100.*precision, 100.*recall, 100.*f1, dataset_name,(end-start)/60.0))
     print('--------------------------------------------------------------')
-    return test_acc
+    return test_acc, f1
 
 #%%
 # train procedure
@@ -781,15 +829,15 @@ for epoch in range(start_epoch, total_train_epochs):
     
     print('--------------------------------------------------------------')
     print("Epoch:{} completed, Total Train Loss: {} ".format(epoch, tr_loss))
-    valid_acc = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
+    valid_acc, valid_f1 = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
 
     # Save a checkpoint
-    if valid_acc > valid_acc_prev:
+    if valid_f1 > valid_f1_prev:
         # model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         torch.save({'epoch': epoch, 'model_state': model.state_dict(), 'valid_acc': valid_acc,
-            'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
+            'valid_f1': valid_f1, 'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
                     os.path.join(output_dir, 'ner_bert_crf_checkpoint.pt'))
-        valid_acc_prev = valid_acc
+        valid_f1_prev = valid_f1
 
 #%%
 evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
@@ -807,7 +855,8 @@ net_state_dict = model.state_dict()
 pretrained_dict_selected = {k: v for k, v in pretrained_dict.items() if k in net_state_dict}
 net_state_dict.update(pretrained_dict_selected)
 model.load_state_dict(net_state_dict)
-print('Loaded the pretrain model, epoch:',checkpoint['epoch'],'valid acc:', checkpoint['valid_acc'])
+print('Loaded the pretrain model, epoch:',checkpoint['epoch'],'valid acc:', 
+      checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 model.to(device)
 
 #%%
