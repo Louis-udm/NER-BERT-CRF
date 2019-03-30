@@ -23,7 +23,7 @@ The NER_BERT_CRF.py include 2 model:
 - batch_size = 32
 - learning_rate = 2e-5
 - total_train_epochs = 5
-- bert_model_type = 'bert-base-uncased'
+- bert_model_scale = 'bert-base-uncased'
 - do_lower_case = True
 ### Performance
 - [Bert paper](https://arxiv.org/abs/1810.04805)
