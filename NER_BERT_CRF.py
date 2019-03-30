@@ -75,7 +75,7 @@ do_eval = True
 # "Whether to run the model in inference mode on the test set."
 do_predict = True
 # "The vocabulary file that the BERT model was trained on."
-max_seq_length = 128 #300
+max_seq_length = 512 #128
 batch_size = 32 #32
 # "The initial learning rate for Adam."
 learning_rate = 2e-5
@@ -83,7 +83,7 @@ total_train_epochs = 20
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
-bert_model_type = 'bert-base-uncased'
+bert_model_scale = 'bert-base-uncased'
 do_lower_case = True
 eval_batch_size = 8
 predict_batch_size = 8
@@ -398,7 +398,7 @@ train_examples = conllProcessor.get_train_examples(data_dir)
 dev_examples = conllProcessor.get_dev_examples(data_dir)
 test_examples = conllProcessor.get_test_examples(data_dir)
 
-tokenizer = BertTokenizer.from_pretrained(bert_model_type, do_lower_case=do_lower_case)
+tokenizer = BertTokenizer.from_pretrained(bert_model_scale, do_lower_case=do_lower_case)
 
 train_features, train_tokenize_info = convert_examples_to_features(train_examples, max_seq_length, tokenizer, label_map)
 dev_features, train_tokenize_info = convert_examples_to_features(dev_examples, max_seq_length, tokenizer, label_map)
@@ -444,7 +444,7 @@ if load_checkpoint and os.path.exists(output_dir+'/ner_bert_checkpoint.pt'):
     valid_acc_prev = checkpoint['valid_acc']
     valid_f1_prev = checkpoint['valid_f1']
     model = BertForTokenClassification.from_pretrained(
-        bert_model_type, state_dict=checkpoint['model_state'], num_labels=len(label_list))
+        bert_model_scale, state_dict=checkpoint['model_state'], num_labels=len(label_list))
     print('Loaded the pretrain NER_BERT model, epoch:',checkpoint['epoch'],'valid acc:', 
             checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 else:
@@ -452,7 +452,7 @@ else:
     valid_acc_prev = 0
     valid_f1_prev = 0
     model = BertForTokenClassification.from_pretrained(
-        bert_model_type, num_labels=len(label_list))
+        bert_model_scale, num_labels=len(label_list))
 
 model.to(device)
 
@@ -542,9 +542,24 @@ for epoch in range(start_epoch, total_train_epochs):
                     os.path.join(output_dir, 'ner_bert_checkpoint.pt'))
         valid_f1_prev = valid_f1
 
+
 #%%
-evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
-evaluate(model, test_dataloader, batch_size, total_train_epochs-1, 'Test_set')
+'''
+Test_set prediction using the best epoch of NER_BERT model
+'''
+checkpoint = torch.load(output_dir+'/ner_bert_checkpoint.pt', map_location='cpu')
+epoch = checkpoint['epoch']
+valid_acc_prev = checkpoint['valid_acc']
+valid_f1_prev = checkpoint['valid_f1']
+model = BertForTokenClassification.from_pretrained(
+    bert_model_scale, state_dict=checkpoint['model_state'], num_labels=len(label_list))
+# if os.path.exists(output_dir+'/ner_bert_crf_checkpoint.pt'):
+model.to(device)
+print('Loaded the pretrain NER_BERT model, epoch:',checkpoint['epoch'],'valid acc:', 
+        checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
+
+# evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
+evaluate(model, test_dataloader, batch_size, epoch, 'Test_set')
 print('Total spend:',(time.time() - train_start)/60.0)
 
 
@@ -723,7 +738,7 @@ class BERT_CRF_NER(nn.Module):
 start_label_id = conllProcessor.get_start_label_id()
 stop_label_id = conllProcessor.get_stop_label_id()
 
-bert_model = BertModel.from_pretrained(bert_model_type)
+bert_model = BertModel.from_pretrained(bert_model_scale)
 model = BERT_CRF_NER(bert_model, start_label_id, stop_label_id, len(label_list), max_seq_length, batch_size, device)
 
 #%%
@@ -852,17 +867,25 @@ print('Total spend:',(time.time()-train_start)/60.0)
 
 #%%
 '''
-Test prediction
+Test_set prediction using the best epoch of NER_BERT_CRF model
 '''
-checkpoint = torch.load(output_dir+'/ner_bert_crf_checkpoint_e5.pt', map_location='cpu')
+checkpoint = torch.load(output_dir+'/ner_bert_crf_checkpoint.pt', map_location='cpu')
+epoch = checkpoint['epoch']
+valid_acc_prev = checkpoint['valid_acc']
+valid_f1_prev = checkpoint['valid_f1']
 pretrained_dict=checkpoint['model_state']
 net_state_dict = model.state_dict()
 pretrained_dict_selected = {k: v for k, v in pretrained_dict.items() if k in net_state_dict}
 net_state_dict.update(pretrained_dict_selected)
 model.load_state_dict(net_state_dict)
-print('Loaded the pretrain model, epoch:',checkpoint['epoch'],'valid acc:', 
-      checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 model.to(device)
+print('Loaded the pretrain  NER_BERT_CRF  model, epoch:',checkpoint['epoch'],'valid acc:', 
+      checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
+
+#evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
+evaluate(model, test_dataloader, batch_size, epoch, 'Test_set')
+print('Total spend:',(time.time()-train_start)/60.0)
+
 
 #%%
 # do some prediction
