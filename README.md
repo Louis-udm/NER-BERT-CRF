@@ -23,9 +23,8 @@ The NER_BERT_CRF.py include 2 model:
 - batch_size = 16
 - learning_rate = 4e-5
 - weight_decay = 0.001
-- learning_rate for CRF: 2e-4 
-- weight_decay for CRF: 0.0005
-- learning_rate for full connect layer: 2e-4 
+- learning_rate for CRF and FC: 2e-4 
+- weight_decay for CRF and FC: 0.0005
 - total_train_epochs = 10
 - bert_model_scale = 'bert-base-uncased'
 - do_lower_case = True
