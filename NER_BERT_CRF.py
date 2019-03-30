@@ -78,7 +78,10 @@ do_predict = True
 max_seq_length = 512 #128
 batch_size = 32 #32
 # "The initial learning rate for Adam."
-learning_rate = 2e-5
+learning_rate0 = 4e-5
+lr0_crf_fc = 2e-4
+weight_decay_finetune = 1e-4 #0.01
+weight_decay_crf_fc = 5e-5 #0.005
 total_train_epochs = 20
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
@@ -460,10 +463,10 @@ model.to(device)
 named_params = list(model.named_parameters())
 no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
-    {'params': [p for n, p in named_params if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+    {'params': [p for n, p in named_params if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay_finetune},
     {'params': [p for n, p in named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
 ]
-optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate, warmup=warmup_proportion, t_total=total_train_steps)
+optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
 
 def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     # print("***** Running prediction *****")
@@ -522,7 +525,7 @@ for epoch in range(start_epoch, total_train_epochs):
 
         if (step + 1) % gradient_accumulation_steps == 0:
             # modify learning rate with special warm up BERT uses
-            lr_this_step = learning_rate * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr_this_step
             optimizer.step()
@@ -768,15 +771,15 @@ no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
 new_param = ['transitions', 'hidden2label.weight', 'hidden2label.bias']
 optimizer_grouped_parameters = [
     {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay) \
-        and not any(nd in n for nd in new_param)], 'weight_decay': 0.01},
+        and not any(nd in n for nd in new_param)], 'weight_decay': weight_decay_finetune},
     {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay) \
         and not any(nd in n for nd in new_param)], 'weight_decay': 0.0},
     {'params': [p for n, p in param_optimizer if n in ('transitions','hidden2label.weight')] \
-        , 'lr':2e-3, 'weight_decay': 0.005},
+        , 'lr':lr0_crf_fc, 'weight_decay': weight_decay_crf_fc},
     {'params': [p for n, p in param_optimizer if n == 'hidden2label.bias'] \
-        , 'lr':2e-3, 'weight_decay': 0.0}
+        , 'lr':lr0_crf_fc, 'weight_decay': 0.0}
 ]
-optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate, warmup=warmup_proportion, t_total=total_train_steps)
+optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
 
 def warmup_linear(x, warmup=0.002):
     if x < warmup:
@@ -838,7 +841,7 @@ for epoch in range(start_epoch, total_train_epochs):
 
         if (step + 1) % gradient_accumulation_steps == 0:
             # modify learning rate with special warm up BERT uses
-            lr_this_step = learning_rate * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr_this_step
             optimizer.step()
