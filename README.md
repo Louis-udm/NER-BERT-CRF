@@ -16,13 +16,17 @@ The NER_BERT_CRF.py include 2 model:
 - model 2:
   - A pretrained BERT with CRF model.
 - data set
-  - [CoNLL-2003](https://github.com/Franck-Dernoncourt/NeuroNER/tree/master/neuroner/data/conll2003/en)
+  - [CoNLL-2003](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
 ### Parameters
 - NER_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC', '[CLS]', '[SEP]', 'X']
-- max_seq_length = 128
-- batch_size = 32
-- learning_rate = 2e-5
-- total_train_epochs = 5
+- max_seq_length = 256
+- batch_size = 16
+- learning_rate = 4e-5
+- weight_decay = 0.001
+- learning_rate for CRF: 2e-4 
+- weight_decay for CRF: 0.0005
+- learning_rate for full connect layer: 2e-4 
+- total_train_epochs = 10
 - bert_model_scale = 'bert-base-uncased'
 - do_lower_case = True
 ### Performance
@@ -43,4 +47,4 @@ The NER_BERT_CRF.py include 2 model:
 - [Bert paper](https://arxiv.org/abs/1810.04805)
 - [Bert with PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT)
 - [Bert-ner](https://github.com/ericput/bert-ner)
-- [CoNLL-2003 data set](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
+- [CoNLL-2003 data set](https://github.com/Franck-Dernoncourt/NeuroNER/tree/master/neuroner/data/conll2003/en)
