@@ -88,15 +88,15 @@ warmup_proportion = 0.1
 output_dir = './output/'
 bert_model_scale = 'bert-base-uncased'
 do_lower_case = True
-eval_batch_size = 8
-predict_batch_size = 8
+# eval_batch_size = 8
+# predict_batch_size = 8
 # "Proportion of training to perform linear learning rate warmup for. "
 # "E.g., 0.1 = 10% of training."
 warmup_proportion = 0.1
 # "How often to save the model checkpoint."
-save_checkpoints_steps = 1000
+# save_checkpoints_steps = 1000
 # "How many steps to make in each estimator call."
-iterations_per_loop = 1000
+# iterations_per_loop = 1000
 load_checkpoint = True
 
 
