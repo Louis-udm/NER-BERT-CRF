@@ -4,7 +4,7 @@
 # NER_BERT_CRF.py
 # @author Zhibin.LU
 # @created Fri Feb 15 2019 22:47:19 GMT-0500 (EST)
-# @last-modified Fri Mar 29 2019 11:37:18 GMT-0400 (EDT)
+# @last-modified Sun Mar 31 2019 12:17:08 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description: Bert pytorch pretrainde model with or without CRF for NER
 # The NER_BERT_CRF.py include 2 model:
@@ -31,12 +31,12 @@ import torch.autograd as autograd
 import torch.optim as optim
 
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
+from torch.utils import data
 
 from tqdm import tqdm, trange
 import collections
 
-from pytorch_pretrained_bert.modeling import BertModel, BertForTokenClassification
+from pytorch_pretrained_bert.modeling import BertModel, BertForTokenClassification, BertLayerNorm
 import pickle
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from pytorch_pretrained_bert.tokenization import BertTokenizer
@@ -46,6 +46,8 @@ def set_work_dir(local_path="ner_bert_crf", server_path="ner_bert_crf"):
         os.chdir(os.getenv("HOME")+'/'+local_path)
     elif (os.path.exists(os.getenv("HOME")+'/'+server_path)):
         os.chdir(os.getenv("HOME")+'/'+server_path)
+    else:
+        raise Exception('Set work path error!')
 
 
 def get_data_dir(local_path="ner_bert_crf", server_path="ner_bert_crf"):
@@ -53,6 +55,8 @@ def get_data_dir(local_path="ner_bert_crf", server_path="ner_bert_crf"):
         return os.getenv("HOME")+'/'+local_path
     elif (os.path.exists(os.getenv("HOME")+'/'+server_path)):
         return os.getenv("HOME")+'/'+server_path
+    else:
+        raise Exception('get data path error!')
 
 
 print('Python version ', sys.version)
@@ -75,14 +79,14 @@ do_eval = True
 # "Whether to run the model in inference mode on the test set."
 do_predict = True
 # "The vocabulary file that the BERT model was trained on."
-max_seq_length = 512 #128
+max_seq_length = 150 #128
 batch_size = 32 #32
 # "The initial learning rate for Adam."
-learning_rate0 = 4e-5
-lr0_crf_fc = 2e-4
-weight_decay_finetune = 1e-4 #0.01
-weight_decay_crf_fc = 5e-5 #0.005
-total_train_epochs = 20
+learning_rate0 = 5e-5
+lr0_crf_fc = 8e-5
+weight_decay_finetune = 0.0 #1e-4 #0.01
+weight_decay_crf_fc = 0.0 #5e-5 #0.005
+total_train_epochs = 15
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
@@ -154,40 +158,38 @@ class DataProcessor(object):
 
     @classmethod
     def _read_data(cls, input_file):
-        """Reads a BIO data."""
+        """
+        Reads a BIO data.
+        原文档按\n分更合理
+        """
         with open(input_file) as f:
-            out_lines = []
+            # out_lines = []
             out_lists = []
-            words = []
-            ner_labels = []
-            pos_tags = []
-            bio_pos_tags = []
-
-            for line in f:
-                pieces = line.strip().split(' ')
-                if len(pieces) < 1:
-                    continue
-                word = pieces[0]
-                if word == "-DOCSTART-" or word == '':
-                    continue
-                words.append(word)
-                ner_labels.append(pieces[-1])
-                pos_tags.append(pieces[1])
-                bio_pos_tags.append(pieces[2])
-                if word == '.':
-                    sentence = ' '.join(words)
-                    ner_seq = ' '.join(ner_labels)
-                    pos_tag_seq = ' '.join(pos_tags) # ner not need
-                    bio_pos_tag_seq = ' '.join(bio_pos_tags) # ner not need
-                    out_lines.append(
-                        [sentence, pos_tag_seq, bio_pos_tag_seq, ner_seq])
-                    out_lists.append([words,pos_tags,bio_pos_tags,ner_labels])
-                    words = []
-                    ner_labels = []
-                    pos_tags = []
-                    bio_pos_tags = []
-            # return out_lines, out_lists
-            return out_lists
+            entries = f.read().strip().split("\n\n")
+            for entry in entries:
+                words = []
+                ner_labels = []
+                pos_tags = []
+                bio_pos_tags = []
+                for line in entry.splitlines():
+                    pieces = line.strip().split()
+                    if len(pieces) < 1:
+                        continue
+                    word = pieces[0]
+                    # if word == "-DOCSTART-" or word == '':
+                    #     continue
+                    words.append(word)
+                    pos_tags.append(pieces[1])
+                    bio_pos_tags.append(pieces[2])
+                    ner_labels.append(pieces[-1])
+                # sentence = ' '.join(words)
+                # ner_seq = ' '.join(ner_labels)
+                # pos_tag_seq = ' '.join(pos_tags) # ner任务没用它
+                # bio_pos_tag_seq = ' '.join(bio_pos_tags) # ner任务没用它
+                # out_lines.append([sentence, pos_tag_seq, bio_pos_tag_seq, ner_seq])
+                # out_lines.append([sentence, ner_seq])
+                out_lists.append([words,pos_tags,bio_pos_tags,ner_labels])
+        return out_lists
 
 
 class CoNLLDataProcessor(DataProcessor):
@@ -196,8 +198,8 @@ class CoNLLDataProcessor(DataProcessor):
     '''
 
     def __init__(self):
-        self._label_types = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG',
-                             'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC', '[CLS]', '[SEP]', 'X']
+        self._label_types = ['X', 'O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG',
+                             'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
         self._num_labels = len(self._label_types)
         self._label_map = {label: i for i,
                            label in enumerate(self._label_types)}
@@ -208,7 +210,7 @@ class CoNLLDataProcessor(DataProcessor):
 
     def get_dev_examples(self, data_dir):
         return self._create_examples(
-            self._read_data(os.path.join(data_dir, "dev.txt")))
+            self._read_data(os.path.join(data_dir, "valid.txt")))
 
     def get_test_examples(self, data_dir):
         return self._create_examples(
@@ -224,10 +226,10 @@ class CoNLLDataProcessor(DataProcessor):
         return self._label_map
     
     def get_start_label_id(self):
-        return self._label_map['[CLS]']
+        return self._label_map['X']
 
     def get_stop_label_id(self):
-        return self._label_map['[SEP]']
+        return self._label_map['X']
 
     def _create_examples(self, all_lists):
         examples = []
@@ -250,119 +252,92 @@ class CoNLLDataProcessor(DataProcessor):
         return examples
 
 
-# if task_name in ['msra', 'pd98']: label_preprocessed = True else false
-def convert_examples_to_features(examples, max_seq_length, tokenizer, label_map, label_preprocessed=False):
-    """Loads a data file into a list of `InputBatch`s."""
+def example2feature(example, tokenizer, label_map, max_seq_length):
 
-    features = []
-    tokenize_info = []
     add_label = 'X'
-    for (ex_index, example) in enumerate(examples):
-        tokenize_count = []
-        tokens = ['[CLS]']
-        predict_mask = [0]
-        label_ids = [label_map['[CLS]']]
-        for i, w in enumerate(example.words):
-            # use bertTokenizer seperate the words not in the vocab file
-            # use tokenize_count recode the count seperated of one word
-            # 1996-08-22 => 1996 - 08 - 22
-            # sheepmeat => sheep ##me ##at
-            sub_words = tokenizer.tokenize(w)
-            if not sub_words:
-                sub_words = ['[UNK]']
-            tokenize_count.append(len(sub_words))
-            tokens.extend(sub_words)
-            if not label_preprocessed:
-                for j in range(len(sub_words)):
-                    if j == 0:
-                        predict_mask.append(1)
-                        label_ids.append(label_map[example.labels[i]])
-                    else:
-                        # '##xxx' -> 'X' (see bert paper) and the predict_mask for this is 0
-                        predict_mask.append(0)
-                        label_ids.append(label_map[add_label])
-        if label_preprocessed:
-            predict_mask.extend([1] * len(example.labels))
-            label_ids.extend([label_map[label] for label in example.labels])
-            assert len(tokens) == len(label_ids), str(ex_index)
-        tokenize_info.append(tokenize_count)
+    # tokenize_count = []
+    tokens = ['[CLS]']
+    predict_mask = [0]
+    label_ids = [label_map['X']]
+    for i, w in enumerate(example.words):
+        # use bertTokenizer to split words
+        # 1996-08-22 => 1996 - 08 - 22
+        # sheepmeat => sheep ##me ##at
+        sub_words = tokenizer.tokenize(w)
+        if not sub_words:
+            sub_words = ['[UNK]']
+        # tokenize_count.append(len(sub_words))
+        tokens.extend(sub_words)
+        for j in range(len(sub_words)):
+            if j == 0:
+                predict_mask.append(1)
+                label_ids.append(label_map[example.labels[i]])
+            else:
+                # '##xxx' -> 'X' (see bert paper)
+                predict_mask.append(0)
+                label_ids.append(label_map[add_label])
 
-        if len(tokens) > max_seq_length - 1:
-            print('Example No.{} is too long, length is {}, truncated to {}!'.format(ex_index, len(tokens), max_seq_length))
-            tokens = tokens[0:(max_seq_length - 1)]
-            predict_mask = predict_mask[0:(max_seq_length - 1)]
-            label_ids = label_ids[0:(max_seq_length - 1)]
-        tokens.append('[SEP]')
-        predict_mask.append(0)
-        label_ids.append(label_map['[SEP]'])
+    # truncate
+    if len(tokens) > max_seq_length - 1:
+        print('Example No.{} is too long, length is {}, truncated to {}!'.format(example.guid, len(tokens), max_seq_length))
+        tokens = tokens[0:(max_seq_length - 1)]
+        predict_mask = predict_mask[0:(max_seq_length - 1)]
+        label_ids = label_ids[0:(max_seq_length - 1)]
+    tokens.append('[SEP]')
+    predict_mask.append(0)
+    label_ids.append(label_map['X'])
 
-        input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        segment_ids = [0] * len(input_ids)
-        input_mask = [1] * len(input_ids)
+    input_ids = tokenizer.convert_tokens_to_ids(tokens)
+    segment_ids = [0] * len(input_ids)
+    input_mask = [1] * len(input_ids)
 
-        # Pad up to the sequence length
-        padding_length = max_seq_length - len(input_ids)
-        zero_padding = [0] * padding_length
-        input_ids += zero_padding
-        input_mask += zero_padding
-        segment_ids += zero_padding
-        predict_mask += zero_padding
-        label_ids += [label_map[add_label]] * padding_length
-
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-        assert len(predict_mask) == max_seq_length
-        assert len(label_ids) == max_seq_length
-
-        # if ex_index < 5:
-        #     print("*** Example ***")
-        #     print("guid: %s" % (example.guid))
-        #     print("words: %s" % " ".join(example.words))
-        #     print("tokens: %s" % " ".join(tokens))
-        #     print("tokenize_info:", tokenize_info[ex_index])
-        #     print("labels: %s %s %s" % ('[CLS]', " ".join(example.labels), '[SEP]'))
-        #     print("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-        #     print("label_ids: %s" % " ".join([str(x) for x in label_ids]))
-        #     print("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-        #     print("predict_mask: %s" % " ".join([str(x) for x in predict_mask]))
-        #     print("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-
-        # one_hot_labels = np.eye(len(label_map), dtype=np.float32)[label_ids]
-        # features.append(
-        #     InputFeatures(
-        #         input_ids=input_ids, 
-        #         input_mask=input_mask, 
-        #         segment_ids=segment_ids,
-        #         predict_mask=predict_mask, 
-        #         one_hot_labels=one_hot_labels))
-        
-        features.append(
-            InputFeatures(
+    feat=InputFeatures(
                 # guid=example.guid,
                 # tokens=tokens,
                 input_ids=input_ids,
                 input_mask=input_mask,
                 segment_ids=segment_ids,
                 predict_mask=predict_mask,
-                label_ids=label_ids))
-                
-    return features, tokenize_info
+                label_ids=label_ids)
 
-def f1_score(y_true, y_pred, ignore_labels=np.array([0,9,10,11])):
-    '''
-    0,9,10,11 are O,[CLS],[SEP],[X]
-    '''
-    # y_pred=y_pred[np.isin(y_pred,ignore_labels,invert=True)]
-    # y_true=y_true[np.isin(y_true,ignore_labels,invert=True)]
-    num_proposed = len(y_pred[np.isin(y_pred,ignore_labels,invert=True)])
-    num_correct = (np.logical_and(y_true==y_pred, 
-                    np.isin(y_true,ignore_labels,invert=True))).sum()
-    num_gold = len(y_true[np.isin(y_true,ignore_labels,invert=True)])
+    return feat
 
-    # print(f"num_proposed:{num_proposed}")
-    # print(f"num_correct:{num_correct}")
-    # print(f"num_gold:{num_gold}")
+class NerDataset(data.Dataset):
+    def __init__(self, examples, tokenizer, label_map, max_seq_length):
+        self.examples=examples
+        self.tokenizer=tokenizer
+        self.label_map=label_map
+        self.max_seq_length=max_seq_length
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, idx):
+        feat=example2feature(self.examples[idx], self.tokenizer, self.label_map, max_seq_length)
+        return feat.input_ids, feat.input_mask, feat.segment_ids, feat.predict_mask, feat.label_ids
+
+def pad(batch):
+
+    seqlen_list = [len(sample[0]) for sample in batch]
+    maxlen = np.array(seqlen_list).max()
+
+    f = lambda x, seqlen: [sample[x] + [0] * (seqlen - len(sample[x])) for sample in batch] # 0: X for padding
+    input_ids_list = torch.LongTensor(f(0, maxlen))
+    input_mask_list = torch.LongTensor(f(1, maxlen))
+    segment_ids_list = torch.LongTensor(f(2, maxlen))
+    predict_mask_list = torch.ByteTensor(f(3, maxlen))
+    label_ids_list = torch.LongTensor(f(4, maxlen))
+
+    return input_ids_list, input_mask_list, segment_ids_list, predict_mask_list, label_ids_list
+
+def f1_score(y_true, y_pred):
+    '''
+    0,1,2,3 are [CLS],[SEP],[X],O
+    '''
+    num_proposed = len(y_pred[y_pred>1])
+    num_correct = (np.logical_and(y_true==y_pred, y_true>1)).sum()
+    num_gold = len(y_true[y_true>1])
+
     try:
         precision = num_correct / num_proposed
     except ZeroDivisionError:
@@ -382,7 +357,7 @@ def f1_score(y_true, y_pred, ignore_labels=np.array([0,9,10,11])):
             f1=0
 
     return precision, recall, f1
-    
+
 #%%
 '''
 Prepare data set
@@ -401,13 +376,6 @@ train_examples = conllProcessor.get_train_examples(data_dir)
 dev_examples = conllProcessor.get_dev_examples(data_dir)
 test_examples = conllProcessor.get_test_examples(data_dir)
 
-tokenizer = BertTokenizer.from_pretrained(bert_model_scale, do_lower_case=do_lower_case)
-
-train_features, train_tokenize_info = convert_examples_to_features(train_examples, max_seq_length, tokenizer, label_map)
-dev_features, train_tokenize_info = convert_examples_to_features(dev_examples, max_seq_length, tokenizer, label_map)
-test_features, train_tokenize_info = convert_examples_to_features(test_examples, max_seq_length, tokenizer, label_map)
-
-
 total_train_steps = int(len(train_examples) / batch_size / gradient_accumulation_steps * total_train_epochs)
 
 print("***** Running training *****")
@@ -415,24 +383,29 @@ print("  Num examples = %d"% len(train_examples))
 print("  Batch size = %d"% batch_size)
 print("  Num steps = %d"% total_train_steps)
 
+tokenizer = BertTokenizer.from_pretrained(bert_model_scale, do_lower_case=do_lower_case)
 
-def get_pytorch_dataloader(features, batch_size, suffle=True):
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    all_predict_mask = torch.ByteTensor([f.predict_mask for f in features])
-    all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-    data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_predict_mask, all_label_ids)
-    sampler = RandomSampler(data)
-    if suffle:
-        return DataLoader(data, sampler=sampler, batch_size=batch_size)
-    else:
-        return DataLoader(data, batch_size=batch_size)
+train_dataset = NerDataset(train_examples,tokenizer,label_map,max_seq_length)
+dev_dataset = NerDataset(dev_examples,tokenizer,label_map,max_seq_length)
+test_dataset = NerDataset(test_examples,tokenizer,label_map,max_seq_length)
 
+train_dataloader = data.DataLoader(dataset=train_dataset,
+                                batch_size=batch_size,
+                                shuffle=True,
+                                num_workers=4,
+                                collate_fn=pad)
 
-train_dataloader = get_pytorch_dataloader(train_features, batch_size)
-dev_dataloader = get_pytorch_dataloader(dev_features, batch_size)
-test_dataloader = get_pytorch_dataloader(test_features, batch_size)
+dev_dataloader = data.DataLoader(dataset=dev_dataset,
+                                batch_size=batch_size,
+                                shuffle=False,
+                                num_workers=4,
+                                collate_fn=pad)
+
+test_dataloader = data.DataLoader(dataset=test_dataset,
+                                batch_size=batch_size,
+                                shuffle=False,
+                                num_workers=4,
+                                collate_fn=pad)
 
 
 #%%
@@ -466,7 +439,8 @@ optimizer_grouped_parameters = [
     {'params': [p for n, p in named_params if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay_finetune},
     {'params': [p for n, p in named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
 ]
-optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+# optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
 
 def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     # print("***** Running prediction *****")
@@ -494,7 +468,7 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     test_acc = correct/total
     precision, recall, f1 = f1_score(np.array(all_labels), np.array(all_preds))
     end = time.time()
-    print('Epoch:%d, Acc:%.2f, P%.2f, R%.2f, F%.2f on %s, Spend:%.3f minutes for evaluation' \
+    print('Epoch:%d, Acc:%.2f, Precision: %.2f, Recall: %.2f, F1: %.2f on %s, Spend: %.3f minutes for evaluation' \
         % (epoch_th, 100.*test_acc, 100.*precision, 100.*recall, 100.*f1, dataset_name,(end-start)/60.0))
     print('--------------------------------------------------------------')
     return test_acc, f1
@@ -505,8 +479,10 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
 train_start = time.time()
 global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_steps * start_epoch)
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
+optimizer.zero_grad()
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
+    train_start = time.time()
     model.train()
     # for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
     for step, batch in enumerate(train_dataloader):
@@ -517,34 +493,35 @@ for epoch in range(start_epoch, total_train_epochs):
         # loss = model(input_ids, segment_ids, input_mask, predict_mask, one_hot_labels)
         loss = model(input_ids, segment_ids, input_mask, label_ids)
 
-        if gradient_accumulation_steps > 1:
-            loss = loss / gradient_accumulation_steps
+        # if gradient_accumulation_steps > 1:
+        #     loss = loss / gradient_accumulation_steps
 
         loss.backward()
         tr_loss += loss.item()
 
-        if (step + 1) % gradient_accumulation_steps == 0:
-            # modify learning rate with special warm up BERT uses
-            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr_this_step
-            optimizer.step()
-            optimizer.zero_grad()
-            global_step_th += 1
+        # if (step + 1) % gradient_accumulation_steps == 0:
+        #     # modify learning rate with special warm up BERT uses
+        #     lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+        #     for param_group in optimizer.param_groups:
+        #         param_group['lr'] = lr_this_step
+        optimizer.step()
+        optimizer.zero_grad()
+        global_step_th += 1
           
-        print("Epoch:{}-{}/{}, Train CrossEntropyLoss: {} ".format(epoch, step, len(train_dataloader), loss.item()))
+        print("Epoch:{}-{}/{}, CrossEntropyLoss: {} ".format(epoch, step, len(train_dataloader), loss.item()))
     
     print('--------------------------------------------------------------')
-    print("Epoch:{} completed, Total Train Loss: {} ".format(epoch, tr_loss)) 
+    print("Epoch:{} completed, Total training's Loss: {}, Spend: {}m".format(epoch, tr_loss, (time.time() - train_start)/60.0))
     valid_acc, valid_f1 = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
     # Save a checkpoint
     if valid_f1 > valid_f1_prev:
         # model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         torch.save({'epoch': epoch, 'model_state': model.state_dict(), 'valid_acc': valid_acc,
-            'valid_f1':valid_f1, 'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
+            'valid_f1': valid_f1, 'max_seq_length': max_seq_length, 'lower_case': do_lower_case},
                     os.path.join(output_dir, 'ner_bert_checkpoint.pt'))
         valid_f1_prev = valid_f1
 
+evaluate(model, test_dataloader, batch_size, total_train_epochs-1, 'Test_set')
 
 #%%
 '''
@@ -561,10 +538,9 @@ model.to(device)
 print('Loaded the pretrain NER_BERT model, epoch:',checkpoint['epoch'],'valid acc:', 
         checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 
+model.to(device)
 # evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
 evaluate(model, test_dataloader, batch_size, epoch, 'Test_set')
-print('Total spend:',(time.time() - train_start)/60.0)
-
 
 
 #%%
@@ -576,7 +552,7 @@ Bert is for latent label -> Emission of word embedding.
 print('*** Use BertModel + CRF ***')
 
 def log_sum_exp_1vec(vec):  # shape(1,m)
-    max_score = vec[0, argmax(vec)]
+    max_score = vec[0, np.argmax(vec)]
     max_score_broadcast = max_score.view(1, -1).expand(1, vec.size()[1])
     return max_score + torch.log(torch.sum(torch.exp(vec - max_score_broadcast)))
 
@@ -595,7 +571,7 @@ class BERT_CRF_NER(nn.Module):
         self.start_label_id = start_label_id
         self.stop_label_id = stop_label_id
         self.num_labels = num_labels
-        self.max_seq_length = max_seq_length
+        # self.max_seq_length = max_seq_length
         self.batch_size = batch_size
         self.device=device
 
@@ -637,7 +613,8 @@ class BERT_CRF_NER(nn.Module):
         this also called alpha-recursion or forward recursion, to calculate log_prob of all barX 
         '''
         
-        T = self.max_seq_length
+        # T = self.max_seq_length
+        T = feats.shape[1]
         batch_size = feats.shape[0]
         
         # alpha_recursion,forward, alpha(zt)=p(zt,bar_x_1:t)
@@ -670,7 +647,8 @@ class BERT_CRF_NER(nn.Module):
         p(X=w1:t,Zt=tag1:t)=...p(Zt=tag_t|Zt-1=tag_t-1)p(xt|Zt=tag_t)...
         '''
         
-        T = self.max_seq_length
+        # T = self.max_seq_length
+        T = feats.shape[1]
         batch_size = feats.shape[0]
 
         batch_transitions = self.transitions.expand(batch_size,self.num_labels,self.num_labels)
@@ -689,7 +667,8 @@ class BERT_CRF_NER(nn.Module):
         Max-Product Algorithm or viterbi algorithm, argmax(p(z_0:t|x_0:t))
         '''
         
-        T = self.max_seq_length
+        # T = self.max_seq_length
+        T = feats.shape[1]
         batch_size = feats.shape[0]
 
         # batch_transitions=self.transitions.expand(batch_size,self.num_labels,self.num_labels)
@@ -779,7 +758,8 @@ optimizer_grouped_parameters = [
     {'params': [p for n, p in param_optimizer if n == 'hidden2label.bias'] \
         , 'lr':lr0_crf_fc, 'weight_decay': 0.0}
 ]
-optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+# optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
 
 def warmup_linear(x, warmup=0.002):
     if x < warmup:
@@ -811,7 +791,7 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     test_acc = correct/total
     precision, recall, f1 = f1_score(np.array(all_labels), np.array(all_preds))
     end = time.time()
-    print('Epoch:%d, Acc:%.2f, P%.2f, R%.2f, F%.2f on %s, Spend:%.3f minutes for evaluation' \
+    print('Epoch:%d, Acc:%.2f, Precision: %.2f, Recall: %.2f, F1: %.2f on %s, Spend:%.3f minutes for evaluation' \
         % (epoch_th, 100.*test_acc, 100.*precision, 100.*recall, 100.*f1, dataset_name,(end-start)/60.0))
     print('--------------------------------------------------------------')
     return test_acc, f1
@@ -822,8 +802,10 @@ global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_st
 
 train_start=time.time()
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
+optimizer.zero_grad()
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
+    train_start = time.time()
     model.train()
     # for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
     for step, batch in enumerate(train_dataloader):
@@ -839,19 +821,19 @@ for epoch in range(start_epoch, total_train_epochs):
 
         tr_loss += neg_log_likelihood.item()
 
-        if (step + 1) % gradient_accumulation_steps == 0:
-            # modify learning rate with special warm up BERT uses
-            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr_this_step
-            optimizer.step()
-            optimizer.zero_grad()
-            global_step_th += 1
+        # if (step + 1) % gradient_accumulation_steps == 0:
+        #     # modify learning rate with special warm up BERT uses
+        #     lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+        #     for param_group in optimizer.param_groups:
+        #         param_group['lr'] = lr_this_step
+        optimizer.step()
+        optimizer.zero_grad()
+        global_step_th += 1
             
-        print("Epoch:{}-{}/{}, Train neg_log_likelihood: {} ".format(epoch, step, len(train_dataloader), neg_log_likelihood.item()))
+        print("Epoch:{}-{}/{}, Negative loglikelihood: {} ".format(epoch, step, len(train_dataloader), neg_log_likelihood.item()))
     
     print('--------------------------------------------------------------')
-    print("Epoch:{} completed, Total Train Loss: {} ".format(epoch, tr_loss))
+    print("Epoch:{} completed, Total training's Loss: {}, Spend: {}m".format(epoch, tr_loss, (time.time() - train_start)/60.0))
     valid_acc, valid_f1 = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
 
     # Save a checkpoint
@@ -862,10 +844,7 @@ for epoch in range(start_epoch, total_train_epochs):
                     os.path.join(output_dir, 'ner_bert_crf_checkpoint.pt'))
         valid_f1_prev = valid_f1
 
-#%%
-evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
 evaluate(model, test_dataloader, batch_size, total_train_epochs-1, 'Test_set')
-print('Total spend:',(time.time()-train_start)/60.0)
 
 
 #%%
@@ -881,21 +860,24 @@ net_state_dict = model.state_dict()
 pretrained_dict_selected = {k: v for k, v in pretrained_dict.items() if k in net_state_dict}
 net_state_dict.update(pretrained_dict_selected)
 model.load_state_dict(net_state_dict)
-model.to(device)
 print('Loaded the pretrain  NER_BERT_CRF  model, epoch:',checkpoint['epoch'],'valid acc:', 
       checkpoint['valid_acc'], 'valid f1:', checkpoint['valid_f1'])
 
+model.to(device)
 #evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
 evaluate(model, test_dataloader, batch_size, epoch, 'Test_set')
 print('Total spend:',(time.time()-train_start)/60.0)
 
 
 #%%
-# do some prediction
 model.eval()
 with torch.no_grad():
-    demonstration_dl=get_pytorch_dataloader(test_features, 10, suffle=False)
-    for batch in demonstration_dl:
+    demon_dataloader = data.DataLoader(dataset=test_dataset,
+                                batch_size=10,
+                                shuffle=False,
+                                num_workers=4,
+                                collate_fn=pad)
+    for batch in demon_dataloader:
         batch = tuple(t.to(device) for t in batch)
         input_ids, input_mask, segment_ids, predict_mask, label_ids = batch
         _, predicted_label_seq_ids = model(input_ids, segment_ids, input_mask)
