@@ -19,7 +19,7 @@ The NER_BERT_CRF.py include 2 model:
   - [CoNLL-2003](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
 ### Parameters
 - NER_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC', '[CLS]', '[SEP]', 'X']
-- max_seq_length = 150
+- max_seq_length = 180
 - batch_size = 32
 - learning_rate = 5e-5
 - weight_decay = 1e-5
