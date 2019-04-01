@@ -5,6 +5,8 @@ This is a named entity recognizer based on [BERT Model(pytorch-pretrained-BERT)]
 
 Someone construct model with BERT, LSTM and CRF, like this [BERT-BiLSTM-CRF-NER](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER), but in theory, the BERT mechanism has replaced the role of LSTM, so I think LSTM is redundant.
 
+For the performance, BERT+CRF is always a little better than single BERT in my experience, but I adjusted the parameters many times, still a little bit worse than the original paper. If anyone knows, can you tell me?
+
 ## Requirements
 - python 3.6
 - pytorch 1.0.0
