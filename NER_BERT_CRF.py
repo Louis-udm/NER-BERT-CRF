@@ -224,10 +224,10 @@ class CoNLLDataProcessor(DataProcessor):
         return self._label_map
     
     def get_start_label_id(self):
-        return self._label_map['X']
+        return self._label_map['CLS']
 
     def get_stop_label_id(self):
-        return self._label_map['X']
+        return self._label_map['SEP']
 
     def _create_examples(self, all_lists):
         examples = []
