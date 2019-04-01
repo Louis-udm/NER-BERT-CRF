@@ -79,7 +79,7 @@ do_eval = True
 # "Whether to run the model in inference mode on the test set."
 do_predict = True
 # "The vocabulary file that the BERT model was trained on."
-max_seq_length = 150 #128
+max_seq_length = 180 #256
 batch_size = 32 #32
 # "The initial learning rate for Adam."
 learning_rate0 = 5e-5
