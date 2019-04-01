@@ -84,14 +84,14 @@ batch_size = 32 #32
 # "The initial learning rate for Adam."
 learning_rate0 = 5e-5
 lr0_crf_fc = 8e-5
-weight_decay_finetune = 0.0 #1e-4 #0.01
-weight_decay_crf_fc = 0.0 #5e-5 #0.005
+weight_decay_finetune = 1e-5 #0.01
+weight_decay_crf_fc = 5e-6 #0.005
 total_train_epochs = 15
 gradient_accumulation_steps = 1
 warmup_proportion = 0.1
 output_dir = './output/'
-bert_model_scale = 'bert-base-uncased'
-do_lower_case = True
+bert_model_scale = 'bert-base-cased'
+do_lower_case = False
 # eval_batch_size = 8
 # predict_batch_size = 8
 # "Proportion of training to perform linear learning rate warmup for. "
@@ -124,7 +124,7 @@ class InputExample(object):
         self.guid = guid
         # list of words of the sentence,example: [EU, rejects, German, call, to, boycott, British, lamb .]
         self.words = words
-        # list of label sequence of the sentence,比如: [B-ORG, O, B-MISC, O, O, O, B-MISC, O, O]
+        # list of label sequence of the sentence,like: [B-ORG, O, B-MISC, O, O, O, B-MISC, O, O]
         self.labels = labels
 
 
@@ -160,7 +160,6 @@ class DataProcessor(object):
     def _read_data(cls, input_file):
         """
         Reads a BIO data.
-        原文档按\n分更合理
         """
         with open(input_file) as f:
             # out_lines = []
@@ -184,8 +183,8 @@ class DataProcessor(object):
                     ner_labels.append(pieces[-1])
                 # sentence = ' '.join(words)
                 # ner_seq = ' '.join(ner_labels)
-                # pos_tag_seq = ' '.join(pos_tags) # ner任务没用它
-                # bio_pos_tag_seq = ' '.join(bio_pos_tags) # ner任务没用它
+                # pos_tag_seq = ' '.join(pos_tags) 
+                # bio_pos_tag_seq = ' '.join(bio_pos_tags) 
                 # out_lines.append([sentence, pos_tag_seq, bio_pos_tag_seq, ner_seq])
                 # out_lines.append([sentence, ner_seq])
                 out_lists.append([words,pos_tags,bio_pos_tags,ner_labels])
@@ -198,8 +197,7 @@ class CoNLLDataProcessor(DataProcessor):
     '''
 
     def __init__(self):
-        self._label_types = ['X', 'O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG',
-                             'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC']
+        self._label_types = [ 'X', '[CLS]', '[SEP]', 'O', 'I-LOC', 'B-PER', 'I-PER', 'I-ORG', 'I-MISC', 'B-MISC', 'B-LOC', 'B-ORG']
         self._num_labels = len(self._label_types)
         self._label_map = {label: i for i,
                            label in enumerate(self._label_types)}
@@ -258,7 +256,7 @@ def example2feature(example, tokenizer, label_map, max_seq_length):
     # tokenize_count = []
     tokens = ['[CLS]']
     predict_mask = [0]
-    label_ids = [label_map['X']]
+    label_ids = [label_map['CLS']]
     for i, w in enumerate(example.words):
         # use bertTokenizer to split words
         # 1996-08-22 => 1996 - 08 - 22
@@ -285,7 +283,7 @@ def example2feature(example, tokenizer, label_map, max_seq_length):
         label_ids = label_ids[0:(max_seq_length - 1)]
     tokens.append('[SEP]')
     predict_mask.append(0)
-    label_ids.append(label_map['X'])
+    label_ids.append(label_map['SEP'])
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     segment_ids = [0] * len(input_ids)
@@ -334,9 +332,11 @@ def f1_score(y_true, y_pred):
     '''
     0,1,2,3 are [CLS],[SEP],[X],O
     '''
-    num_proposed = len(y_pred[y_pred>1])
-    num_correct = (np.logical_and(y_true==y_pred, y_true>1)).sum()
-    num_gold = len(y_true[y_true>1])
+    ignore_id=3
+    
+    num_proposed = len(y_pred[y_pred>ignore_id])
+    num_correct = (np.logical_and(y_true==y_pred, y_true>ignore_id)).sum()
+    num_gold = len(y_true[y_true>ignore_id])
 
     try:
         precision = num_correct / num_proposed
@@ -439,8 +439,8 @@ optimizer_grouped_parameters = [
     {'params': [p for n, p in named_params if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay_finetune},
     {'params': [p for n, p in named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
 ]
-# optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
+optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+# optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
 
 def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
     # print("***** Running prediction *****")
@@ -479,34 +479,32 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
 train_start = time.time()
 global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_steps * start_epoch)
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
-optimizer.zero_grad()
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
     train_start = time.time()
     model.train()
+    optimizer.zero_grad()
     # for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
     for step, batch in enumerate(train_dataloader):
         batch = tuple(t.to(device) for t in batch)
-        # input_ids, input_mask, segment_ids, predict_mask, one_hot_labels = batch
+        
         input_ids, input_mask, segment_ids, predict_mask, label_ids = batch
-
-        # loss = model(input_ids, segment_ids, input_mask, predict_mask, one_hot_labels)
         loss = model(input_ids, segment_ids, input_mask, label_ids)
 
-        # if gradient_accumulation_steps > 1:
-        #     loss = loss / gradient_accumulation_steps
+        if gradient_accumulation_steps > 1:
+            loss = loss / gradient_accumulation_steps
 
         loss.backward()
         tr_loss += loss.item()
 
-        # if (step + 1) % gradient_accumulation_steps == 0:
-        #     # modify learning rate with special warm up BERT uses
-        #     lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = lr_this_step
-        optimizer.step()
-        optimizer.zero_grad()
-        global_step_th += 1
+        if (step + 1) % gradient_accumulation_steps == 0:
+            # modify learning rate with special warm up BERT uses
+            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr_this_step
+            optimizer.step()
+            optimizer.zero_grad()
+            global_step_th += 1
           
         print("Epoch:{}-{}/{}, CrossEntropyLoss: {} ".format(epoch, step, len(train_dataloader), loss.item()))
     
@@ -758,8 +756,8 @@ optimizer_grouped_parameters = [
     {'params': [p for n, p in param_optimizer if n == 'hidden2label.bias'] \
         , 'lr':lr0_crf_fc, 'weight_decay': 0.0}
 ]
-# optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
+optimizer = BertAdam(optimizer_grouped_parameters, lr=learning_rate0, warmup=warmup_proportion, t_total=total_train_steps)
+# optimizer = optim.Adam(model.parameters(), lr=learning_rate0)
 
 def warmup_linear(x, warmup=0.002):
     if x < warmup:
@@ -802,11 +800,11 @@ global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_st
 
 train_start=time.time()
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
-optimizer.zero_grad()
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
     train_start = time.time()
     model.train()
+    optimizer.zero_grad()
     # for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
     for step, batch in enumerate(train_dataloader):
         batch = tuple(t.to(device) for t in batch)
@@ -821,14 +819,14 @@ for epoch in range(start_epoch, total_train_epochs):
 
         tr_loss += neg_log_likelihood.item()
 
-        # if (step + 1) % gradient_accumulation_steps == 0:
-        #     # modify learning rate with special warm up BERT uses
-        #     lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = lr_this_step
-        optimizer.step()
-        optimizer.zero_grad()
-        global_step_th += 1
+        if (step + 1) % gradient_accumulation_steps == 0:
+            # modify learning rate with special warm up BERT uses
+            lr_this_step = learning_rate0 * warmup_linear(global_step_th/total_train_steps, warmup_proportion)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr_this_step
+            optimizer.step()
+            optimizer.zero_grad()
+            global_step_th += 1
             
         print("Epoch:{}-{}/{}, Negative loglikelihood: {} ".format(epoch, step, len(train_dataloader), neg_log_likelihood.item()))
     
