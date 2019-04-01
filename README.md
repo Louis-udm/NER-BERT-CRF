@@ -19,29 +19,29 @@ The NER_BERT_CRF.py include 2 model:
   - [CoNLL-2003](https://github.com/FuYanzhe2/Name-Entity-Recognition/tree/master/BERT-BiLSTM-CRF-NER/NERdata)
 ### Parameters
 - NER_labels = ['O', 'B-PER', 'I-PER', 'B-ORG', 'I-ORG', 'B-LOC', 'I-LOC', 'B-MISC', 'I-MISC', '[CLS]', '[SEP]', 'X']
-- max_seq_length = 256
-- batch_size = 16
-- learning_rate = 4e-5
-- weight_decay = 0.001
-- learning_rate for CRF and FC: 2e-4 
-- weight_decay for CRF and FC: 0.0005
-- total_train_epochs = 10
-- bert_model_scale = 'bert-base-uncased'
-- do_lower_case = True
+- max_seq_length = 150
+- batch_size = 32
+- learning_rate = 5e-5
+- weight_decay = 1e-5
+- learning_rate for CRF and FC: 8e-5 
+- weight_decay for CRF and FC: 5e-6
+- total_train_epochs = 15
+- bert_model_scale = 'bert-base-cased'
+- do_lower_case = False
 ### Performance
 - [Bert paper](https://arxiv.org/abs/1810.04805)
   - F1-Score on valid data: 96.4 %
   - F1-Score on test data: 92.4 %
-- BertForTokenClassification (epochs = 8)
-  - Accuracy on valid data: 99.772 %
-  - Accuracy on test data: 97.758 %
-  - F1-Score on valid data: 
-  - F1-Score on test data: 
-- Bert+CRF (epochs = 8)
-  - Accuracy on valid data: 99.940 %
-  - Accuracy of test data: 97.906 % 
-  - F1-Score on valid data: 
-  - F1-Score on test data: 
+- BertForTokenClassification (epochs = 14)
+  - Accuracy on valid data: 99.10 %
+  - Accuracy on test data: 98.11 %
+  - F1-Score on valid data: 96.18 %
+  - F1-Score on test data: 92.17 %
+- Bert+CRF (epochs = 4)
+  - Accuracy on valid data: 98.64 %
+  - Accuracy of test data: 97.56 % 
+  - F1-Score on valid data: 93.76 %
+  - F1-Score on test data: 89.78 %
 ### References
 - [Bert paper](https://arxiv.org/abs/1810.04805)
 - [Bert with PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT)
