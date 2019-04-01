@@ -47,4 +47,4 @@ The NER_BERT_CRF.py include 2 model:
 - [Bert with PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT)
 - [Bert-ner](https://github.com/ericput/bert-ner)
 - [CoNLL-2003 data set](https://github.com/Franck-Dernoncourt/NeuroNER/tree/master/neuroner/data/conll2003/en)
-- [Kyubyong/bert_ner]https://github.com/Kyubyong/bert_ner
+- [Kyubyong/bert_ner](https://github.com/Kyubyong/bert_ner)
