@@ -315,19 +315,20 @@ class NerDataset(data.Dataset):
         feat=example2feature(self.examples[idx], self.tokenizer, self.label_map, max_seq_length)
         return feat.input_ids, feat.input_mask, feat.segment_ids, feat.predict_mask, feat.label_ids
 
-def pad(batch):
+    @classmethod
+    def pad(batch):
 
-    seqlen_list = [len(sample[0]) for sample in batch]
-    maxlen = np.array(seqlen_list).max()
+        seqlen_list = [len(sample[0]) for sample in batch]
+        maxlen = np.array(seqlen_list).max()
 
-    f = lambda x, seqlen: [sample[x] + [0] * (seqlen - len(sample[x])) for sample in batch] # 0: X for padding
-    input_ids_list = torch.LongTensor(f(0, maxlen))
-    input_mask_list = torch.LongTensor(f(1, maxlen))
-    segment_ids_list = torch.LongTensor(f(2, maxlen))
-    predict_mask_list = torch.ByteTensor(f(3, maxlen))
-    label_ids_list = torch.LongTensor(f(4, maxlen))
+        f = lambda x, seqlen: [sample[x] + [0] * (seqlen - len(sample[x])) for sample in batch] # 0: X for padding
+        input_ids_list = torch.LongTensor(f(0, maxlen))
+        input_mask_list = torch.LongTensor(f(1, maxlen))
+        segment_ids_list = torch.LongTensor(f(2, maxlen))
+        predict_mask_list = torch.ByteTensor(f(3, maxlen))
+        label_ids_list = torch.LongTensor(f(4, maxlen))
 
-    return input_ids_list, input_mask_list, segment_ids_list, predict_mask_list, label_ids_list
+        return input_ids_list, input_mask_list, segment_ids_list, predict_mask_list, label_ids_list
 
 def f1_score(y_true, y_pred):
     '''
@@ -394,19 +395,19 @@ train_dataloader = data.DataLoader(dataset=train_dataset,
                                 batch_size=batch_size,
                                 shuffle=True,
                                 num_workers=4,
-                                collate_fn=pad)
+                                collate_fn=NerDataset.pad)
 
 dev_dataloader = data.DataLoader(dataset=dev_dataset,
                                 batch_size=batch_size,
                                 shuffle=False,
                                 num_workers=4,
-                                collate_fn=pad)
+                                collate_fn=NerDataset.pad)
 
 test_dataloader = data.DataLoader(dataset=test_dataset,
                                 batch_size=batch_size,
                                 shuffle=False,
                                 num_workers=4,
-                                collate_fn=pad)
+                                collate_fn=NerDataset.pad)
 
 
 #%%
