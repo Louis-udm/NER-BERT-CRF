@@ -78,6 +78,8 @@ do_train = True
 do_eval = True
 # "Whether to run the model in inference mode on the test set."
 do_predict = True
+# Whether load checkpoint file before train model
+load_checkpoint = True
 # "The vocabulary file that the BERT model was trained on."
 max_seq_length = 180 #256
 batch_size = 32 #32
@@ -96,12 +98,11 @@ do_lower_case = False
 # predict_batch_size = 8
 # "Proportion of training to perform linear learning rate warmup for. "
 # "E.g., 0.1 = 10% of training."
-warmup_proportion = 0.1
+# warmup_proportion = 0.1
 # "How often to save the model checkpoint."
 # save_checkpoints_steps = 1000
 # "How many steps to make in each estimator call."
 # iterations_per_loop = 1000
-load_checkpoint = True
 
 
 # %%
@@ -256,7 +257,7 @@ def example2feature(example, tokenizer, label_map, max_seq_length):
     # tokenize_count = []
     tokens = ['[CLS]']
     predict_mask = [0]
-    label_ids = [label_map['CLS']]
+    label_ids = [label_map['[CLS]']]
     for i, w in enumerate(example.words):
         # use bertTokenizer to split words
         # 1996-08-22 => 1996 - 08 - 22
@@ -283,7 +284,7 @@ def example2feature(example, tokenizer, label_map, max_seq_length):
         label_ids = label_ids[0:(max_seq_length - 1)]
     tokens.append('[SEP]')
     predict_mask.append(0)
-    label_ids.append(label_map['SEP'])
+    label_ids.append(label_map['[SEP]'])
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     segment_ids = [0] * len(input_ids)
