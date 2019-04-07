@@ -477,7 +477,7 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
 
 #%%
 # train procedure using only BertForTokenClassification
-train_start = time.time()
+# train_start = time.time()
 global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_steps * start_epoch)
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
 for epoch in range(start_epoch, total_train_epochs):
@@ -510,7 +510,10 @@ for epoch in range(start_epoch, total_train_epochs):
         print("Epoch:{}-{}/{}, CrossEntropyLoss: {} ".format(epoch, step, len(train_dataloader), loss.item()))
     
     print('--------------------------------------------------------------')
-    print("Epoch:{} completed, Total training's Loss: {}, Spend: {}m".format(epoch, tr_loss, (time.time() - train_start)/60.0))
+    print("Epoch:{} completed, Total training's Loss: {}, Spend: {}m".format(epoch, tr_loss, (time.time() - 
+                                                                                             
+                                                                                             
+                                                                                             )/60.0))
     valid_acc, valid_f1 = evaluate(model, dev_dataloader, batch_size, epoch, 'Valid_set')
     # Save a checkpoint
     if valid_f1 > valid_f1_prev:
@@ -799,7 +802,7 @@ def evaluate(model, predict_dataloader, batch_size, epoch_th, dataset_name):
 # train procedure
 global_step_th = int(len(train_examples) / batch_size / gradient_accumulation_steps * start_epoch)
 
-train_start=time.time()
+# train_start=time.time()
 # for epoch in trange(start_epoch, total_train_epochs, desc="Epoch"):
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
@@ -865,7 +868,7 @@ print('Loaded the pretrain  NER_BERT_CRF  model, epoch:',checkpoint['epoch'],'va
 model.to(device)
 #evaluate(model, train_dataloader, batch_size, total_train_epochs-1, 'Train_set')
 evaluate(model, test_dataloader, batch_size, epoch, 'Test_set')
-print('Total spend:',(time.time()-train_start)/60.0)
+# print('Total spend:',(time.time()-train_start)/60.0)
 
 
 #%%
