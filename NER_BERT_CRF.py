@@ -316,7 +316,7 @@ class NerDataset(data.Dataset):
         return feat.input_ids, feat.input_mask, feat.segment_ids, feat.predict_mask, feat.label_ids
 
     @classmethod
-    def pad(batch):
+    def pad(cls, batch):
 
         seqlen_list = [len(sample[0]) for sample in batch]
         maxlen = np.array(seqlen_list).max()
