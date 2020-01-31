@@ -10,7 +10,7 @@ For the performance, BERT+CRF is always a little better than single BERT in my e
 ## Requirements
 - python 3.6
 - pytorch 1.0.0
-- pytorch-pretrained-bert 0.4.0
+- [pytorch-pretrained-bert 0.4.0](https://github.com/huggingface/transformers/releases/tag/v0.4.0)
 ## Overview
 The NER_BERT_CRF.py include 2 model:
 - model 1:
